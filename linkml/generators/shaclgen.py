@@ -118,8 +118,8 @@ class ShaclGenerator(Generator):
                     prop_pv(SH["class"], URIRef(range_ref))
                     if sv.get_identifier_slot(r) is not None:
                         prop_pv(SH.nodeKind, SH.IRI)
-                    else:
-                        prop_pv(SH.nodeKind, SH.BlankNode)
+                    # else:
+                    #    prop_pv(SH.nodeKind, SH.BlankNode)
                 elif r in sv.all_types().values():
                     rt = sv.get_type(r)
                     if rt.uri:
