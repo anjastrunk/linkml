@@ -51,7 +51,7 @@ class ShaclGenerator(Generator):
         g = self.as_graph()
         data = g.serialize(
             format="turtle" if self.format in ["owl", "ttl"] else self.format
-        ).decode()
+        ) #.decode()
         return data
 
     def as_graph(self) -> None:
