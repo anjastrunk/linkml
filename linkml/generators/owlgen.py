@@ -123,7 +123,7 @@ class OwlSchemaGenerator(Generator):
     def end_schema(self, output: Optional[str] = None, **_) -> None:
         data = self.graph.serialize(
             format="turtle" if self.format in ["owl", "ttl"] else self.format
-        ).decode()
+        )#.decode()
         if output:
             with open(output, "w", encoding="UTF-8") as outf:
                 outf.write(data)
