@@ -445,16 +445,16 @@ from dataclasses import dataclass
 from dataclasses import field
 from typing import List
 
-from sqlalchemy import Column
-from sqlalchemy import ForeignKey
-from sqlalchemy import Integer
-from sqlalchemy import MetaData
-from sqlalchemy import String
-from sqlalchemy import Table
-from sqlalchemy import Text
-from sqlalchemy import Integer
-from sqlalchemy.orm import registry
-from sqlalchemy.orm import relationship
+from sqlalchemy_linkml import Column
+from sqlalchemy_linkml import ForeignKey
+from sqlalchemy_linkml import Integer
+from sqlalchemy_linkml import MetaData
+from sqlalchemy_linkml import String
+from sqlalchemy_linkml import Table
+from sqlalchemy_linkml import Text
+from sqlalchemy_linkml import Integer
+from sqlalchemy_linkml.orm import registry
+from sqlalchemy_linkml.orm import relationship
 
 mapper_registry = registry()
 metadata = MetaData()
@@ -521,7 +521,7 @@ SQL-Alchemy dialect, e.g. sqlite, mysql+odbc
 @click.option(
     "--sqla-file",
     help="""
-Path to sqlalchemy generated python
+Path to sqlalchemy_linkml generated python
 """,
 )
 @click.option(

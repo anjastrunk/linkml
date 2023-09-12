@@ -1,9 +1,9 @@
 sqlalchemy_declarative_template_str = """
-from sqlalchemy import Column, Index, Table, ForeignKey
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql.sqltypes import *
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.ext.associationproxy import association_proxy
+from sqlalchemy_linkml import Column, Index, Table, ForeignKey
+from sqlalchemy_linkml.orm import relationship
+from sqlalchemy_linkml.sql.sqltypes import *
+from sqlalchemy_linkml.orm import declarative_base
+from sqlalchemy_linkml.ext.associationproxy import association_proxy
 
 Base = declarative_base()
 metadata = Base.metadata

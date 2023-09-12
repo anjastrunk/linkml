@@ -21,7 +21,7 @@ from sqlalchemy import Enum
 from linkml._version import __version__
 from linkml.generators.pydanticgen import PydanticGenerator
 from linkml.generators.pythongen import PythonGenerator
-from linkml.generators.sqlalchemy import (
+from linkml.generators.sqlalchemy_linkml import (
     sqlalchemy_declarative_template_str,
     sqlalchemy_imperative_template_str,
 )

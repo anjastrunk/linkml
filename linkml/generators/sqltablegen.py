@@ -268,7 +268,7 @@ class SQLTableGenerator(Generator):
     show_default=True,
     help="SQL-Alchemy dialect, e.g. sqlite, mysql+odbc",
 )
-@click.option("--sqla-file", help="Path to sqlalchemy generated python")
+@click.option("--sqla-file", help="Path to sqlalchemy_linkml generated python")
 @click.option(
     "--relmodel-output",
     help="Path to intermediate LinkML YAML of transformed relational model",
