@@ -18,10 +18,15 @@ LINK_ML_TYPES_STRING = URIRef("http://www.w3.org/2001/XMLSchema#string")
 LINK_ML_TYPES_BOOL = URIRef("http://www.w3.org/2001/XMLSchema#boolean")
 LINK_ML_TYPES_DECIMAL = URIRef("http://www.w3.org/2001/XMLSchema#decimal")
 LINK_ML_TYPES_INTEGER = URIRef("http://www.w3.org/2001/XMLSchema#integer")
+LINK_ML_TYPES_FLOAT = URIRef("http://www.w3.org/2001/XMLSchema#foat")
+LINK_ML_TYPES_DOUBLE = URIRef("http://www.w3.org/2001/XMLSchema#double")
 LINK_ML_TYPES_DURATION = URIRef("http://www.w3.org/2001/XMLSchema#duration")
 LINK_ML_TYPES_DATETIME = URIRef("http://www.w3.org/2001/XMLSchema#dateTime")
 LINK_ML_TYPES_DATE = URIRef("http://www.w3.org/2001/XMLSchema#date")
 LINK_ML_TYPES_TIME = URIRef("http://www.w3.org/2001/XMLSchema#time")
+LINK_ML_TYPES_ANY_URI = URIRef("http://www.w3.org/2001/XMLSchema#anyUri")
+LINK_ML_TYPES_IRI = URIRef("http://www.w3.org/2001/XMLSchema#iri")
+
 
 
 @dataclass
@@ -223,7 +228,16 @@ def add_simple_data_type(func: Callable, range: ElementName) -> None:
         func(SH.datatype, LINK_ML_TYPES_DECIMAL)
     elif range == "integer":
         func(SH.datatype, LINK_ML_TYPES_INTEGER)
-
+    elif range == "floar":
+        func(SH.datatype, LINK_ML_TYPES_FLOAT)
+    elif range == "double":
+        func(SH.datatype, LINK_ML_TYPES_DOUBLE)
+    elif range == "curie":
+        func(SH.datatype, LINK_ML_TYPES_STRING)
+    elif range == "uri":
+        func(SH.datatype, LINK_ML_TYPES_ANY_URI)
+    elif range == "objectidentifier":
+        func(SH.datatype, LINK_ML_TYPES_IRI)
 
 @shared_arguments(ShaclGenerator)
 @click.option(
