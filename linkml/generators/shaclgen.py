@@ -19,10 +19,9 @@ LINK_ML_TYPES_INTEGER = URIRef("http://www.w3.org/2001/XMLSchema#integer")
 LINK_ML_TYPES_FLOAT = URIRef("http://www.w3.org/2001/XMLSchema#float")
 LINK_ML_TYPES_DOUBLE = URIRef("http://www.w3.org/2001/XMLSchema#double")
 LINK_ML_TYPES_DURATION = URIRef("http://www.w3.org/2001/XMLSchema#duration")
-LINK_ML_TYPES_DATETIME = URIRef("http://www.w3.org/2001/XMLSchema#dateTime")
+LINK_ML_TYPES_DATE_TIME = URIRef("http://www.w3.org/2001/XMLSchema#dateTime")
 LINK_ML_TYPES_DATE = URIRef("http://www.w3.org/2001/XMLSchema#date")
 LINK_ML_TYPES_TIME = URIRef("http://www.w3.org/2001/XMLSchema#time")
-LINK_ML_TYPES_ANY_URI = URIRef("http://www.w3.org/2001/XMLSchema#anyUri")
 LINK_ML_TYPES_URI = URIRef("http://www.w3.org/2001/XMLSchema#anyURI")
 LINK_ML_TYPES_OBJECT_ID = URIRef("http://www.w3.org/ns/shex#iri")
 LINK_ML_TYPES_NODE_ID = URIRef("http://www.w3.org/ns/shex#nonLiteral")
@@ -53,7 +52,7 @@ class ShaclGenerator(Generator):
 
     def serialize(self, **args) -> None:
         g = self.as_graph()
-        data = g.serialize(format="turtle" if self.format in ["owl", "ttl"] else self.format).decode()
+        data = g.serialize(format="turtle" if self.format in ["owl", "ttl"] else self.format)#.decode()
         return data
 
     def as_graph(self) -> None:
