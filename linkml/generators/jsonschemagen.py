@@ -15,12 +15,14 @@ from linkml_runtime.linkml_model.meta import (
     EnumDefinition,
     PermissibleValue,
     PermissibleValueText,
+    PresenceEnum,
     SlotDefinition,
     metamodel_version,
 )
 from linkml_runtime.utils.formatutils import be, camelcase, underscore
 
 from linkml._version import __version__
+from linkml.generators.common.type_designators import get_type_designator_value
 from linkml.utils.generator import Generator, shared_arguments
 
 # Map from underlying python data type to json equivalent
@@ -116,7 +118,10 @@ class JsonSchema(UserDict):
             return JsonSchema({"$ref": f"#/$defs/{def_name}{def_suffix}"})
 
         if isinstance(class_name, list):
-            return JsonSchema({"anyOf": [_ref(name) for name in class_name]})
+            if len(class_name) == 1:
+                return _ref(class_name[0])
+            else:
+                return JsonSchema({"anyOf": [_ref(name) for name in class_name]})
         else:
             return _ref(class_name)
 
@@ -155,10 +160,13 @@ class JsonSchemaGenerator(Generator):
     indent: int = 4
 
     inline: bool = False
-    top_class: Optional[ClassDefinitionName] = None  # JSON object is one instance of this
+    top_class: Optional[Union[ClassDefinitionName, str]] = None  # JSON object is one instance of this
     """Class instantiated by the root node of the document tree"""
 
     include_range_class_descendants: bool = field(default_factory=lambda: False)
+    """If set, use an open world assumption and allow the range of a slot to be any descendant of the declared range.
+    Note that if the range of a slot has a type designator, descendants will always be included.
+    """
 
     top_level_schema: JsonSchema = None
 
@@ -211,9 +219,7 @@ class JsonSchemaGenerator(Generator):
             if open_world is None:
                 open_world = False
 
-            if_subschema = self.get_subschema_for_anonymous_class(
-                rule.preconditions, properties_required=True
-            )
+            if_subschema = self.get_subschema_for_anonymous_class(rule.preconditions, properties_required=True)
             if if_subschema:
                 subschema["if"] = if_subschema
 
@@ -271,30 +277,33 @@ class JsonSchemaGenerator(Generator):
         subschema = JsonSchema()
         for slot in cls.slot_conditions.values():
             prop = self.get_subschema_for_slot(slot, omit_type=True)
-            subschema.add_property(self.aliased_slot_name(slot), prop, properties_required)
+            if slot.value_presence:
+                if slot.value_presence == PresenceEnum(PresenceEnum.PRESENT):
+                    this_properties_required = True
+                elif slot.value_presence == PresenceEnum(PresenceEnum.ABSENT):
+                    this_properties_required = False
+                    # make the slot unsatisfiable
+                    prop["enum"] = []
+                else:
+                    this_properties_required = False
+            else:
+                this_properties_required = properties_required
+            subschema.add_property(self.aliased_slot_name(slot), prop, this_properties_required)
 
         if cls.any_of is not None and len(cls.any_of) > 0:
-            subschema["anyOf"] = [
-                self.get_subschema_for_anonymous_class(c, properties_required) for c in cls.any_of
-            ]
+            subschema["anyOf"] = [self.get_subschema_for_anonymous_class(c, properties_required) for c in cls.any_of]
 
         if cls.all_of is not None and len(cls.all_of) > 0:
-            subschema["allOf"] = [
-                self.get_subschema_for_anonymous_class(c, properties_required) for c in cls.all_of
-            ]
+            subschema["allOf"] = [self.get_subschema_for_anonymous_class(c, properties_required) for c in cls.all_of]
 
         if cls.exactly_one_of is not None and len(cls.exactly_one_of) > 0:
             subschema["oneOf"] = [
-                self.get_subschema_for_anonymous_class(c, properties_required)
-                for c in cls.exactly_one_of
+                self.get_subschema_for_anonymous_class(c, properties_required) for c in cls.exactly_one_of
             ]
 
         if cls.none_of is not None and len(cls.none_of) > 0:
             subschema["not"] = {
-                "anyOf": [
-                    self.get_subschema_for_anonymous_class(c, properties_required)
-                    for c in cls.any_of
-                ]
+                "anyOf": [self.get_subschema_for_anonymous_class(c, properties_required) for c in cls.any_of]
             }
 
         return subschema
@@ -312,9 +321,7 @@ class JsonSchemaGenerator(Generator):
                 return pv
             raise ValueError(f"Invalid permissible value in enum {enum}: {pv}")
 
-        permissible_values_texts = list(
-            map(extract_permissible_text, enum.permissible_values or [])
-        )
+        permissible_values_texts = list(map(extract_permissible_text, enum.permissible_values or []))
 
         enum_schema = JsonSchema(
             {
@@ -326,9 +333,7 @@ class JsonSchemaGenerator(Generator):
             enum_schema["enum"] = permissible_values_texts
         self.top_level_schema.add_def(enum.name, enum_schema)
 
-    def get_type_info_for_slot_subschema(
-        self, slot: AnonymousSlotExpression
-    ) -> Tuple[str, str, Union[str, List[str]]]:
+    def get_type_info_for_slot_subschema(self, slot: AnonymousSlotExpression) -> Tuple[str, str, Union[str, List[str]]]:
         # JSON Schema type (https://json-schema.org/understanding-json-schema/reference/type.html)
         typ = None
         # Reference to a JSON schema entity (https://json-schema.org/understanding-json-schema/structuring.html#ref)
@@ -349,7 +354,12 @@ class JsonSchemaGenerator(Generator):
                     for desc in self.schemaview.class_descendants(slot.range)
                     if not self.schemaview.get_class(desc).abstract
                 ]
-                if descendants and self.include_range_class_descendants:
+                # Always include class descendants if the range class has a type designator
+                include_range_class_descendants = (
+                    self.include_range_class_descendants
+                    or self.schemaview.get_type_designator_slot(slot.range) is not None
+                )
+                if descendants and include_range_class_descendants:
                     reference = descendants
                 else:
                     reference = slot.range
@@ -359,18 +369,29 @@ class JsonSchemaGenerator(Generator):
 
         return (typ, fmt, reference)
 
-    def get_value_constraints_for_slot(
-        self, slot: Union[AnonymousSlotExpression, None]
-    ) -> JsonSchema:
+    def get_value_constraints_for_slot(self, slot: Union[AnonymousSlotExpression, None]) -> JsonSchema:
         if slot is None:
             return JsonSchema()
 
         constraints = JsonSchema()
+        if slot.range in self.schemaview.all_types().keys():
+            # types take lower priority
+            schema_type = self.schemaview.induced_type(slot.range)
+            constraints.add_keyword("pattern", schema_type.pattern)
+            constraints.add_keyword("minimum", schema_type.minimum_value)
+            constraints.add_keyword("maximum", schema_type.maximum_value)
+            constraints.add_keyword("const", schema_type.equals_string)
+            constraints.add_keyword("const", schema_type.equals_number)
         constraints.add_keyword("pattern", slot.pattern)
         constraints.add_keyword("minimum", slot.minimum_value)
         constraints.add_keyword("maximum", slot.maximum_value)
         constraints.add_keyword("const", slot.equals_string)
         constraints.add_keyword("const", slot.equals_number)
+        if slot.value_presence:
+            if slot.value_presence == PresenceEnum(PresenceEnum.PRESENT):
+                constraints.add_keyword("required", True)
+            elif slot.value_presence == PresenceEnum(PresenceEnum.ABSENT):
+                constraints.add_keyword("enum", [])
         return constraints
 
     def get_subschema_for_slot(self, slot: SlotDefinition, omit_type: bool = False) -> JsonSchema:
@@ -397,9 +418,7 @@ class JsonSchemaGenerator(Generator):
                         # If the range can be collected as a simple dict, then we can also accept the value
                         # of that simple dict directly.
                         if range_simple_dict_value_slot is not None:
-                            additionalProps.append(
-                                self.get_subschema_for_slot(range_simple_dict_value_slot)
-                            )
+                            additionalProps.append(self.get_subschema_for_slot(range_simple_dict_value_slot))
 
                         # If the range has no required slots, then null is acceptable
                         if len(range_required_slots) == 0:
@@ -411,12 +430,8 @@ class JsonSchemaGenerator(Generator):
                             additionalProps = additionalProps[0]
                         else:
                             additionalProps = JsonSchema({"anyOf": additionalProps})
-                        prop = JsonSchema(
-                            {"type": "object", "additionalProperties": additionalProps}
-                        )
-                        self.top_level_schema.add_lax_def(
-                            reference, self.aliased_slot_name(range_id_slot)
-                        )
+                        prop = JsonSchema({"type": "object", "additionalProperties": additionalProps})
+                        self.top_level_schema.add_lax_def(reference, self.aliased_slot_name(range_id_slot))
                     else:
                         prop = JsonSchema.array_of(JsonSchema.ref_for(reference))
                 else:
@@ -463,9 +478,7 @@ class JsonSchemaGenerator(Generator):
             bool_subschema["oneOf"] = [self.get_subschema_for_slot(s) for s in slot.exactly_one_of]
 
         if slot.none_of is not None and len(slot.none_of) > 0:
-            bool_subschema["not"] = {
-                "anyOf": [self.get_subschema_for_slot(s) for s in slot.none_of]
-            }
+            bool_subschema["not"] = {"anyOf": [self.get_subschema_for_slot(s) for s in slot.none_of]}
 
         if bool_subschema:
             if prop.is_array:
@@ -478,15 +491,17 @@ class JsonSchemaGenerator(Generator):
 
         return prop
 
-    def handle_class_slot(
-        self, subschema: JsonSchema, cls: ClassDefinition, slot: SlotDefinition
-    ) -> None:
+    def handle_class_slot(self, subschema: JsonSchema, cls: ClassDefinition, slot: SlotDefinition) -> None:
         class_id_slot = self.schemaview.get_identifier_slot(cls.name, use_key=True)
         slot_is_required = slot.required or slot == class_id_slot
 
         aliased_slot_name = self.aliased_slot_name(slot)
         prop = self.get_subschema_for_slot(slot)
         subschema.add_property(aliased_slot_name, prop, slot_is_required)
+
+        if slot.designates_type:
+            type_value = get_type_designator_value(self.schemaview, slot, cls)
+            prop["enum"] = [type_value]
 
     def generate(self) -> dict:
         self.start_schema()
@@ -499,15 +514,11 @@ class JsonSchemaGenerator(Generator):
         return self.top_level_schema
 
     def serialize(self, **kwargs) -> str:
-        return self.generate().to_json(
-            sort_keys=True, indent=self.indent if self.indent > 0 else None
-        )
+        return self.generate().to_json(sort_keys=True, indent=self.indent if self.indent > 0 else None)
 
     def _get_range_associated_slots(
         self, slot: SlotDefinition
-    ) -> Tuple[
-        Union[SlotDefinition, None], Union[SlotDefinition, None], Union[List[SlotDefinition], None]
-    ]:
+    ) -> Tuple[Union[SlotDefinition, None], Union[SlotDefinition, None], Union[List[SlotDefinition], None]]:
         range_class = self.schemaview.get_class(slot.range)
         if range_class is None:
             return None, None, None
@@ -517,9 +528,7 @@ class JsonSchemaGenerator(Generator):
             return None, None, None
 
         non_id_slots = [
-            s
-            for s in self.schemaview.class_induced_slots(range_class.name)
-            if s.name != range_class_id_slot.name
+            s for s in self.schemaview.class_induced_slots(range_class.name) if s.name != range_class_id_slot.name
         ]
         non_id_required_slots = [s for s in non_id_slots if s.required]
 

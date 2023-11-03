@@ -3,6 +3,7 @@ import pytest
 
 from tests.test_compliance.helper import (
     JSON_SCHEMA,
+    OWL,
     PYDANTIC,
     PYTHON_DATACLASSES,
     SQL_DDL_SQLITE,
@@ -81,9 +82,7 @@ from tests.test_compliance.test_compliance import (
     ],
 )
 @pytest.mark.parametrize("framework", CORE_FRAMEWORKS)
-def test_basic_class_inheritance(
-    framework, description, cls: str, object, is_valid, parent_is_abstract
-):
+def test_basic_class_inheritance(framework, description, cls: str, object, is_valid, parent_is_abstract):
     """
     Tests behavior is_a in class hierarchies.
 
@@ -141,11 +140,15 @@ def test_basic_class_inheritance(
     expected_behavior = ValidationBehavior.IMPLEMENTS
     if cls == CLASS_D and parent_is_abstract:
         is_valid = False
-        if framework in [PYDANTIC, PYTHON_DATACLASSES, SQL_DDL_SQLITE]:
+        if framework in [PYDANTIC, PYTHON_DATACLASSES, SQL_DDL_SQLITE, OWL]:
             # currently lax about instantiating abstract classes
             expected_behavior = ValidationBehavior.INCOMPLETE
     schema = validated_schema(
-        test_basic_class_inheritance, f"ABS{parent_is_abstract}", framework, classes=classes
+        test_basic_class_inheritance,
+        f"ABS{parent_is_abstract}",
+        framework,
+        classes=classes,
+        core_elements=["is_a", "abstract"],
     )
     check_data(
         schema,
@@ -264,11 +267,11 @@ def test_mixins(framework, description, cls, object, is_valid):
             },
         },
     }
-    schema = validated_schema(test_mixins, "default", framework, classes=classes)
+    schema = validated_schema(test_mixins, "default", framework, classes=classes, core_elements=["mixins", "mixin"])
     expected_behavior = ValidationBehavior.IMPLEMENTS
     if cls != CLASS_C:
-        if framework in [PYDANTIC, PYTHON_DATACLASSES, SQL_DDL_SQLITE]:
-            # currently lax about instantiating mixins
+        if framework in [PYDANTIC, PYTHON_DATACLASSES, SQL_DDL_SQLITE, OWL]:
+            # currently lax about prohibiting instantiating mixins
             expected_behavior = ValidationBehavior.INCOMPLETE
     check_data(
         schema,
@@ -395,6 +398,9 @@ def test_refine_attributes(framework, description, cls, object, is_valid):
 def test_slot_usage(framework, description, cls, object, is_valid):
     """
     Tests slot usage inheritance.
+
+    * C is_a D, and refines s1 from Y to X
+    * X is_a Y
 
     :param framework:
     :param description:

@@ -1,42 +1,45 @@
-"""
-Tests for annotation compliance.
+"""Tests for annotation compliance.
 
- - TODO: dynamic annotations
+Note these tests differ from other compliance tests in that
+there is no instance data to test.
 """
+from copy import copy
+from typing import Optional
 
 import pytest
 
 from tests.test_compliance.helper import (
-    ValidationBehavior,
-    check_data,
     validated_schema,
 )
 from tests.test_compliance.test_compliance import CLASS_C, CORE_FRAMEWORKS, SLOT_S1
 
 
-@pytest.mark.parametrize("include_meaning", [True, False])
-@pytest.mark.parametrize("value", ["A", "C", "schema:A"])
+@pytest.mark.parametrize("framework", CORE_FRAMEWORKS)
 @pytest.mark.parametrize(
-    "annotation_name,annotation_desc,pvs",
+    "name,class_annotations,slot_annotations",
     [
-        ("annotation_A", "basic_annotation", [("A", "schema:A", "An A"), ("B", "schema:B", "A B")]),
-        (
-            "annotation_B",
-            "curies_annotation",
-            [("schema:A", "schema:A", "An A"), ("schema:B", "schema:B", "A B")],
-        ),
-        (
-            "annotation_C",
-            "ws_annotation",
-            [("A B", "schema:AB", "An A B"), ("B-%", "schema:Bpct", "A B%")],
-        ),
+        ("empty", {}, {}),
+        ("slot_num", {"foo": 1}, {}),
+        ("slot_str", {"foo": "v1"}, {}),
+        ("class_num", {}, {"foo": 1}),
+        ("class_str", {}, {"foo": "v1"}),
+        ("slot_incomplete", {"foo": None}, None),
+        ("class_incomplete", None, {"foo": None}),
     ],
 )
-@pytest.mark.parametrize("framework", CORE_FRAMEWORKS)
-@pytest.mark.skip(reason="TODO:  annotations")
-def test_annotation(framework, annotation_name, annotation_desc, pvs, value, include_meaning):
+@pytest.mark.parametrize("is_valid", [True, False])
+def test_annotation(framework, name, slot_annotations, class_annotations, is_valid):
     """
     Tests behavior of annotations.
+
+    See: https://w3id.org/linkml/annotations
+
+    Note annotations do not affect data, so
+    there is no instance data accompanying this test suite.
+
+    LinkML 1.6 introduced the "instantiates" metaslot which
+    can be used to impose structure on annotations. However, this
+    is not yet implemented.
 
     :param framework: some frameworks like sqlite do not support annotations
     :param annotation_name: name of the annotation
@@ -46,26 +49,40 @@ def test_annotation(framework, annotation_name, annotation_desc, pvs, value, inc
     :param include_meaning: whether to include the meaning in the annotation
     :return:
     """
+
+    def anns(tvs: Optional[dict]) -> Optional[dict]:
+        if tvs is None:
+            return None
+        return {k: {"tag": k, **{"value": v if v else {}}} for k, v in tvs.items()}
+
+    if is_valid:
+        class_annotations = copy(class_annotations) or {}
+        class_annotations["class_metaslot"] = "..."
+    if not is_valid:
+        pytest.skip("TODO: test invalid annotations")
     classes = {
-        CLASS_C: {"attributes": {SLOT_S1: {}, "annotations": {}}},
+        "MetaclassM": {
+            "attributes": {
+                "class_metaslot": {
+                    "required": True,
+                },
+            }
+        },
+        CLASS_C: {
+            "attributes": {
+                SLOT_S1: {
+                    "annotations": anns(slot_annotations),
+                }
+            },
+            "annotations": anns(class_annotations),
+            "instantiates": ["MetaclassM"],
+        },
     }
 
-    schema = validated_schema(
+    _schema = validated_schema(
         test_annotation,
-        f"{annotation_name}_M{include_meaning}",
+        name,
         framework,
         classes=classes,
         core_elements=["annotations"],
-    )
-    is_valid = value in [pv[0] for pv in pvs]
-    expected_behavior = ValidationBehavior.IMPLEMENTS
-    check_data(
-        schema,
-        value.replace(":", "_").replace(" ", "_"),
-        framework,
-        {SLOT_S1: value},
-        is_valid,
-        target_class=CLASS_C,
-        expected_behavior=expected_behavior,
-        description="annotation",
     )

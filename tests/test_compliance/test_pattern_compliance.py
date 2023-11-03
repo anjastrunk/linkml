@@ -7,6 +7,7 @@ import re
 import pytest
 
 from tests.test_compliance.helper import (
+    OWL,
     PYDANTIC,
     PYTHON_DATACLASSES,
     SQL_DDL_SQLITE,
@@ -50,14 +51,14 @@ def test_pattern(framework, schema_name, pattern, data_name, value):
             }
         }
     }
-    schema = validated_schema(
-        test_pattern, schema_name, framework, classes=classes, core_elements=["pattern"]
-    )
+    schema = validated_schema(test_pattern, schema_name, framework, classes=classes, core_elements=["pattern"])
     implementation_status = ValidationBehavior.IMPLEMENTS
     is_valid = bool(re.match(pattern, value))
     if framework in [PYDANTIC, PYTHON_DATACLASSES, SQL_DDL_SQLITE]:
         if not is_valid:
             implementation_status = ValidationBehavior.INCOMPLETE
+    if framework == OWL:
+        pytest.skip("Hermit reasoning over xsd regular expressions is broken")
     check_data(
         schema,
         data_name,

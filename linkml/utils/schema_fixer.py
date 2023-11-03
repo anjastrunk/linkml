@@ -1,5 +1,6 @@
 import logging
 import re
+from collections import defaultdict
 from copy import copy
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Union
@@ -127,13 +128,9 @@ class SchemaFixer:
         for cn in sv.all_classes():
             for s in sv.class_induced_slots(cn):
                 ranges.add(s.range)
-        top_level_classes = [
-            c for c in sv.all_classes().values() if not c.tree_root and c.name not in ranges
-        ]
+        top_level_classes = [c for c in sv.all_classes().values() if not c.tree_root and c.name not in ranges]
         if must_have_identifier:
-            top_level_classes = [
-                c for c in top_level_classes if sv.get_identifier_slot(c.name) is not None
-            ]
+            top_level_classes = [c for c in top_level_classes if sv.get_identifier_slot(c.name) is not None]
         index_slots = []
         for c in top_level_classes:
             has_identifier = sv.get_identifier_slot(c.name)
@@ -157,9 +154,7 @@ class SchemaFixer:
             self._add_history(f"Adding container slot: {index_slot.name}")
         return index_slots
 
-    def attributes_to_slots(
-        self, schema: SchemaDefinition, remove_redundant_slot_usage=True
-    ) -> None:
+    def attributes_to_slots(self, schema: SchemaDefinition, remove_redundant_slot_usage=True) -> None:
         """
         Convert all attributes to slots
 
@@ -211,15 +206,11 @@ class SchemaFixer:
                 if v is not None and v != [] and v != {}:
                     curr_v = getattr(su, k, None)
                     if not overwrite and curr_v and curr_v != v:
-                        raise ValueError(
-                            f"Conflict in {cls.name}.{slot.name}, attr {k} {v} != {curr_v}"
-                        )
+                        raise ValueError(f"Conflict in {cls.name}.{slot.name}, attr {k} {v} != {curr_v}")
                     setattr(su, k, v)
             self._add_history(f"Merged slot usage: {slot.name}")
 
-    def remove_redundant_slot_usage(
-        self, schema: SchemaDefinition, class_name: ClassDefinitionName = None
-    ):
+    def remove_redundant_slot_usage(self, schema: SchemaDefinition, class_name: ClassDefinitionName = None):
         """
         Remove parts of slot_usage that can be inferred
 
@@ -267,15 +258,11 @@ class SchemaFixer:
                         continue
                     induced_v = getattr(induced_slot, metaslot_name, None)
                     if v is not None and v != [] and v != {} and v == induced_v:
-                        logging.info(
-                            f"REDUNDANT: {class_name}.{slot_usage_key}[{metaslot_name}] = {v}"
-                        )
+                        logging.info(f"REDUNDANT: {class_name}.{slot_usage_key}[{metaslot_name}] = {v}")
                         to_delete.append(metaslot_name)
                 for metaslot_name in to_delete:
                     del slot_usage_value[metaslot_name]
-                    self._add_history(
-                        f"Removed redundant: {class_name}.slot_usage[{slot_usage_key}].[{metaslot_name}]"
-                    )
+                    self._add_history(f"Removed redundant: {class_name}.slot_usage[{slot_usage_key}].[{metaslot_name}]")
             empty_keys = []
             for slot_usage_key, slot_usage_value in cls.slot_usage.items():
                 metaslot_keys = list(json_dumper.to_dict(slot_usage_value).keys())
@@ -283,6 +270,40 @@ class SchemaFixer:
                     empty_keys.append(slot_usage_key)
             for k in empty_keys:
                 del cls.slot_usage[k]
+
+    def implicit_slots(self, schema: SchemaDefinition) -> Dict[str, Dict]:
+        """
+        Find slots that are implicit in the schema from slot_usage
+
+        :param schema:
+        :return:
+        """
+        sv = SchemaView(schema)
+        implicit_slots1 = defaultdict(list)
+        for cls in sv.all_classes().values():
+            for slot in cls.slot_usage.values():
+                slot_name = slot.name
+                if slot_name not in sv.all_slots():
+                    implicit_slots1[slot_name].append(json_dumper.to_dict(slot))
+        new_slots = {}
+        for slot_name, slot_list in implicit_slots1.items():
+            all_keys = set()
+            for slot in slot_list:
+                all_keys.update(slot.keys())
+            harmonized_slot = {}
+            for k in all_keys:
+                vals = []
+                vals_strs = set()
+                for slot in slot_list:
+                    val = slot.get(k, None)
+                    vals_strs.add(str(val))
+                    vals.append(val)
+                if len(vals_strs) == 1:
+                    harmonized_slot[k] = vals.pop()
+                elif len(vals_strs) > 1:
+                    logging.info(f"Variable values in {slot_name}.{k}: {vals_strs}")
+            new_slots[str(slot_name)] = harmonized_slot
+        return new_slots
 
     def remove_unused_prefixes(self, schema: SchemaDefinition):
         raise NotImplementedError
@@ -355,7 +376,7 @@ def main(verbose: int, quiet: bool):
     show_default=True,
     help="Apply fix to referenced elements from modules",
 )
-def fix_name(input_schema, **kwargs):
+def fix_names(input_schema, **kwargs):
     """Fix element names to conform to naming conventions"""
     with open(input_schema) as f:
         schema_dict = yaml.safe_load(f)
@@ -363,6 +384,26 @@ def fix_name(input_schema, **kwargs):
     fixer = SchemaFixer()
     schema = fixer.fix_element_names(sv.schema, schema_dict, **kwargs)
     print(yaml.dump(schema, sort_keys=False))
+
+
+@main.command()
+@click.argument("input_schema")
+@click.option(
+    "--imports/--no-imports",
+    default=False,
+    show_default=True,
+    help="Apply fix to referenced elements from modules",
+)
+def implicit_slots(input_schema, **kwargs):
+    """Find implicit slots in schema"""
+    with open(input_schema) as f:
+        yaml.safe_load(f)
+    sv = SchemaView(input_schema)
+    fixer = SchemaFixer()
+    slots = fixer.implicit_slots(sv.schema)
+    for slot in slots.values():
+        del slot["name"]
+    print(yaml.dump({"slots": slots}, sort_keys=False))
 
 
 if __name__ == "__main__":
