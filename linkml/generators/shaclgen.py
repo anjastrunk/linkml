@@ -167,10 +167,12 @@ class ShaclGenerator(Generator):
                     r = s.range
                     if r in all_classes:
                         self._add_class(prop_pv, r)
-                        if sv.get_identifier_slot(r) is not None:
-                            prop_pv(SH.nodeKind, SH.IRI)
-                        else:
-                            prop_pv(SH.nodeKind, SH.BlankNode)
+                        #if sv.get_identifier_slot(r) is not None:
+                        #    prop_pv(SH.nodeKind, SH.IRI)
+                        #else:
+                        #    prop_pv(SH.nodeKind, SH.BlankNode)
+                        #else:
+                        #    prop_pv(SH.node, URIRef(range_ref))
                     elif r in sv.all_types().values():
                         self._add_type(prop_pv, r)
                     elif r in sv.all_enums():
