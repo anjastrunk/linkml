@@ -5,7 +5,7 @@ import re
 from copy import copy
 from dataclasses import dataclass, field
 from types import ModuleType
-from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
+from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple, Union, cast
 
 import click
 from linkml_runtime import SchemaView
@@ -20,6 +20,7 @@ from linkml_runtime.linkml_model.meta import (
     SlotDefinition,
     SlotDefinitionName,
     TypeDefinition,
+    TypeDefinitionName
 )
 from linkml_runtime.utils.compile_python import compile_python
 from linkml_runtime.utils.formatutils import (
@@ -561,6 +562,11 @@ dataclasses._init_fn = dataclasses_init_fn_with_kwargs
 
         range_type, parent_type, _ = self.class_reference_type(slot, cls)
         pkey = self.class_identifier(slot.range)
+
+        # support any_of
+        if slot.any_of:
+            range_type = self.class_reference_type_any_of(slot, cls)
+
         # Special case, inlined, identified range
         if pkey and slot.inlined and slot.multivalued:
             base_key = self.gen_class_reference(self.class_identifier_path(slot.range, False))
@@ -623,6 +629,45 @@ dataclasses._init_fn = dataclasses_init_fn_with_kwargs
         ):
             rangelist[-1] = f'"{rangelist[-1]}"'
         return str(self.gen_class_reference(rangelist)), prox_type, prox_type_name
+
+    def class_reference_type_any_of(self, slot: SlotDefinition, cls: Optional[ClassDefinition]) -> str:
+        """
+        Return the type of slot defined as any_of
+
+        :param slot: slot to be typed
+        :param cls: owning class.  Used for generating key references
+        :return: Python class reference type
+        """
+        rangelist = []
+
+        for item in slot.any_of:
+            item_range_list = []
+            if item.range in self.schema.types:
+                # TypeAnonymousSlotExpression
+                item_range_list = self.range_type_path(self.schema.types[cast(TypeDefinitionName, item.range)])
+            elif item.range in self.schema.enums:
+                item_range_list = self.enum_identifier_path(item.range)
+            else:
+                # Class
+                item_range_list = self.class_identifier_path(item.range, bool(item.inlined))
+
+            if item.range in self.schema.enums or (
+                    cls and slot.inlined and slot.range in self.schema.classes and self.forward_reference(slot.range,
+                                                                                                          cls.name)
+            ):
+                item_range_list[-1] = f'"{item_range_list[-1]}"'
+
+            rangelist.extend(item_range_list)
+        rangelist = list(set(rangelist))
+
+        data_type = ""
+        for type in rangelist:
+            if type == rangelist[0]:
+                data_type = f"{type}"
+            else:
+                data_type = f"{data_type}, {type}"
+
+        return f"Union[{data_type}]"
 
     @staticmethod
     def gen_class_reference(rangelist: List[str]) -> str:
